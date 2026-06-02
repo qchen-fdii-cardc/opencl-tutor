@@ -65,9 +65,9 @@ int main() {
         cl_command_queue queue = clCreateCommandQueue(context, device, 0, &err);
         check_cl(err, "clCreateCommandQueue");
 
-        const int values[4] = {1, 2, 3, 4};
+        int values[4] = {1, 2, 3, 4};
         cl_mem buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                       sizeof(values), const_cast<int*>(values), &err);
+                                       sizeof(values), values, &err);
         check_cl(err, "clCreateBuffer");
 
         std::cout << "Unified error handling flow completed successfully.\n";
