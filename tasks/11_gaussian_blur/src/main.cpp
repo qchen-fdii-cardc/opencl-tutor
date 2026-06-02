@@ -115,10 +115,19 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    clSetKernelArg(kernel, 0, sizeof(cl_mem), &src_buf);
-    clSetKernelArg(kernel, 1, sizeof(cl_mem), &dst_buf);
-    clSetKernelArg(kernel, 2, sizeof(int), &w);
-    clSetKernelArg(kernel, 3, sizeof(int), &h);
+    err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &src_buf);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &dst_buf);
+    err |= clSetKernelArg(kernel, 2, sizeof(int), &w);
+    err |= clSetKernelArg(kernel, 3, sizeof(int), &h);
+    if (err != CL_SUCCESS) {
+        clReleaseMemObject(dst_buf);
+        clReleaseMemObject(src_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
 
     size_t global_size[2] = {static_cast<size_t>(w), static_cast<size_t>(h)};
     cl_event event = nullptr;

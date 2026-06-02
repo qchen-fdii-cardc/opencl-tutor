@@ -87,9 +87,18 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    clSetKernelArg(kernel, 0, sizeof(cl_mem), &in_buf);
-    clSetKernelArg(kernel, 1, sizeof(cl_mem), &out_buf);
-    clSetKernelArg(kernel, 2, sizeof(float), &alpha);
+    err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &in_buf);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &out_buf);
+    err |= clSetKernelArg(kernel, 2, sizeof(float), &alpha);
+    if (err != CL_SUCCESS) {
+        clReleaseMemObject(out_buf);
+        clReleaseMemObject(in_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
 
     size_t global_size = n;
     cl_event event = nullptr;

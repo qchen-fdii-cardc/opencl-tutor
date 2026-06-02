@@ -94,10 +94,19 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    clSetKernelArg(kernel, 0, sizeof(cl_mem), &in_buf);
-    clSetKernelArg(kernel, 1, sizeof(cl_mem), &partial_buf);
-    clSetKernelArg(kernel, 2, sizeof(float) * local_size, nullptr);
-    clSetKernelArg(kernel, 3, sizeof(int), &n);
+    err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &in_buf);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &partial_buf);
+    err |= clSetKernelArg(kernel, 2, sizeof(float) * local_size, nullptr);
+    err |= clSetKernelArg(kernel, 3, sizeof(int), &n);
+    if (err != CL_SUCCESS) {
+        clReleaseMemObject(partial_buf);
+        clReleaseMemObject(in_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
 
     err = clEnqueueNDRangeKernel(queue, kernel, 1, nullptr, &global_size, &local_size, 0, nullptr, nullptr);
     if (err == CL_SUCCESS) {

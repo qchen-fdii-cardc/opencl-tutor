@@ -86,9 +86,19 @@ static bool run_chunk(cl_device_id device,
         return false;
     }
 
-    clSetKernelArg(kernel, 0, sizeof(cl_mem), &a_buf);
-    clSetKernelArg(kernel, 1, sizeof(cl_mem), &b_buf);
-    clSetKernelArg(kernel, 2, sizeof(cl_mem), &c_buf);
+    err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &a_buf);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &b_buf);
+    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &c_buf);
+    if (err != CL_SUCCESS) {
+        clReleaseMemObject(c_buf);
+        clReleaseMemObject(b_buf);
+        clReleaseMemObject(a_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
 
     size_t global_size = n;
     err = clEnqueueNDRangeKernel(queue, kernel, 1, nullptr, &global_size, nullptr, 0, nullptr, nullptr);

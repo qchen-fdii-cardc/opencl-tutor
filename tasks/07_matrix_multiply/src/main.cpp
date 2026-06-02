@@ -104,10 +104,20 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    clSetKernelArg(kernel, 0, sizeof(cl_mem), &a_buf);
-    clSetKernelArg(kernel, 1, sizeof(cl_mem), &b_buf);
-    clSetKernelArg(kernel, 2, sizeof(cl_mem), &c_buf);
-    clSetKernelArg(kernel, 3, sizeof(int), &n);
+    err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &a_buf);
+    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &b_buf);
+    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &c_buf);
+    err |= clSetKernelArg(kernel, 3, sizeof(int), &n);
+    if (err != CL_SUCCESS) {
+        clReleaseMemObject(c_buf);
+        clReleaseMemObject(b_buf);
+        clReleaseMemObject(a_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
 
     size_t global_size[2] = {static_cast<size_t>(n), static_cast<size_t>(n)};
     err = clEnqueueNDRangeKernel(queue, kernel, 2, nullptr, global_size, nullptr, 0, nullptr, nullptr);
