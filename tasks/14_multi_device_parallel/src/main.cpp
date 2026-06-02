@@ -58,9 +58,33 @@ static bool run_chunk(cl_device_id device,
 
     cl_mem a_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bytes,
                                   const_cast<float*>(a.data()), &err);
+    if (err != CL_SUCCESS || a_buf == nullptr) {
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
     cl_mem b_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bytes,
                                   const_cast<float*>(b.data()), &err);
+    if (err != CL_SUCCESS || b_buf == nullptr) {
+        clReleaseMemObject(a_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
     cl_mem c_buf = clCreateBuffer(context, CL_MEM_WRITE_ONLY, bytes, nullptr, &err);
+    if (err != CL_SUCCESS || c_buf == nullptr) {
+        clReleaseMemObject(b_buf);
+        clReleaseMemObject(a_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return false;
+    }
 
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &a_buf);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &b_buf);

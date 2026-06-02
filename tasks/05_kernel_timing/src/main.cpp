@@ -70,7 +70,22 @@ int main() {
 
     const size_t bytes = n * sizeof(float);
     cl_mem in_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bytes, input.data(), &err);
+    if (err != CL_SUCCESS || in_buf == nullptr) {
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
     cl_mem out_buf = clCreateBuffer(context, CL_MEM_WRITE_ONLY, bytes, nullptr, &err);
+    if (err != CL_SUCCESS || out_buf == nullptr) {
+        clReleaseMemObject(in_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
 
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &in_buf);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &out_buf);

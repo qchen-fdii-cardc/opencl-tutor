@@ -62,8 +62,32 @@ int main() {
 
     const size_t bytes = n * sizeof(float);
     cl_mem x_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_USE_HOST_PTR, bytes, x.data(), &err);
+    if (err != CL_SUCCESS || x_buf == nullptr) {
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
     cl_mem y_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bytes, y.data(), &err);
+    if (err != CL_SUCCESS || y_buf == nullptr) {
+        clReleaseMemObject(x_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
     cl_mem z_buf = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, bytes, nullptr, &err);
+    if (err != CL_SUCCESS || z_buf == nullptr) {
+        clReleaseMemObject(y_buf);
+        clReleaseMemObject(x_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
 
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &x_buf);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &y_buf);

@@ -70,8 +70,23 @@ int main() {
 
     cl_mem seed_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                      sizeof(cl_uint) * seeds.size(), seeds.data(), &err);
+    if (err != CL_SUCCESS || seed_buf == nullptr) {
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
     cl_mem hit_buf = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
                                     sizeof(cl_uint) * hits.size(), nullptr, &err);
+    if (err != CL_SUCCESS || hit_buf == nullptr) {
+        clReleaseMemObject(seed_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
 
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &seed_buf);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &hit_buf);
