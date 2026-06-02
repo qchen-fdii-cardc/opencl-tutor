@@ -98,7 +98,22 @@ int main() {
     if (err != CL_SUCCESS) return EXIT_FAILURE;
 
     cl_mem src_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bytes, src.data(), &err);
+    if (err != CL_SUCCESS || src_buf == nullptr) {
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
     cl_mem dst_buf = clCreateBuffer(context, CL_MEM_WRITE_ONLY, bytes, nullptr, &err);
+    if (err != CL_SUCCESS || dst_buf == nullptr) {
+        clReleaseMemObject(src_buf);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
 
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &src_buf);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &dst_buf);

@@ -86,7 +86,22 @@ int main() {
 
     cl_mem src_image = clCreateImage(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
                                      &format, &desc, src.data(), &err);
+    if (err != CL_SUCCESS || src_image == nullptr) {
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
     cl_mem dst_image = clCreateImage(context, CL_MEM_WRITE_ONLY, &format, &desc, nullptr, &err);
+    if (err != CL_SUCCESS || dst_image == nullptr) {
+        clReleaseMemObject(src_image);
+        clReleaseKernel(kernel);
+        clReleaseProgram(program);
+        clReleaseCommandQueue(queue);
+        clReleaseContext(context);
+        return EXIT_FAILURE;
+    }
 
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &src_image);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &dst_image);
