@@ -1,0 +1,17 @@
+<Solution>
+  <Project Path="00_device_report/00_device_report.fsproj" />
+  <Project Path="01_platform_device_inventory/01_platform_device_inventory.fsproj" />
+  <Project Path="02_context_and_queue/02_context_and_queue.fsproj" />
+  <Project Path="03_vector_add_kernel/03_vector_add_kernel.fsproj" />
+  <Project Path="04_error_handling/04_error_handling.fsproj" />
+  <Project Path="05_kernel_timing/05_kernel_timing.fsproj" />
+  <Project Path="06_memory_model_buffers/06_memory_model_buffers.fsproj" />
+  <Project Path="07_matrix_multiply/07_matrix_multiply.fsproj" />
+  <Project Path="08_workgroup_local_memory/08_workgroup_local_memory.fsproj" />
+  <Project Path="09_cpu_vs_opencl_benchmark/09_cpu_vs_opencl_benchmark.fsproj" />
+  <Project Path="10_images_and_samplers/10_images_and_samplers.fsproj" />
+  <Project Path="11_gaussian_blur/11_gaussian_blur.fsproj" />
+  <Project Path="12_extensions/12_extensions.fsproj" />
+  <Project Path="13_nongraphics_apps/13_nongraphics_apps.fsproj" />
+  <Project Path="14_multi_device_parallel/14_multi_device_parallel.fsproj" />
+</Solution>
