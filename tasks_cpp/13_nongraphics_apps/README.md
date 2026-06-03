@@ -31,7 +31,7 @@ cmake --build build --config Debug
 
 ## 验收标准
 - 输出估算值与误差。
-- 输出 `Non-graphics OpenCL task verified.`（误差阈值 `< 0.05`）。
+- 输出 `Non-graphics OpenCL task verified.`（估算值在 `3.05 ~ 3.25` 区间）。
 
 ## 常见错误与排查
 - 误差过大：增加样本量（work-items 或 samples_per_item）。

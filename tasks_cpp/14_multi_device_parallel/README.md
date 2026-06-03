@@ -31,7 +31,7 @@ cmake --build build --config Debug
 
 ## 验收标准
 - 输出使用设备数量。
-- 输出 `Multi-device vector add verified.`。
+- 输出 `Multi-device task verified.`。
 
 ## 常见错误与排查
 - 仅 1 个设备：程序会自动退化为单设备路径。

@@ -32,7 +32,7 @@ cmake --build build --config Debug
 
 ## 验收标准
 - 输出 CPU 时间、OpenCL 时间、加速比。
-- 输出 `Benchmark result validated.`。
+- 输出 `Benchmark result verified.`。
 
 ## 常见错误与排查
 - speedup 异常：确认比较的是同等工作量。
