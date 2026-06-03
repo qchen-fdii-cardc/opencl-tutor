@@ -5,6 +5,10 @@
 - CMakeLists.txt：独立构建入口
 - src/main.cpp：示例代码（已实现或占位）
 
+当前提供两套并行任务目录：
+- `tasks/`：OpenCL C API（`cl.h`）版本
+- `tasks_cpp/`：OpenCL C++ 头文件接口（`cl.hpp` / `opencl.hpp`）版本
+
 ## 文档规范
 
 每个任务的 README 尽量使用中文，并至少说明以下内容：
@@ -55,10 +59,10 @@ cmake --build build/task01 --config Debug
 - OpenCL 官方规范（Khronos）
 - OpenCL-Guide（KhronosGroup）
 - 设备厂商开发文档（NVIDIA / AMD / Intel）
+- [OpenCL 核心概念速查](Concepts.md)
 
 ## 版本控制建议
 
 建议每完成一个任务就提交一次，提交信息示例：
 - feat(task03): add vector addition kernel
 - docs(task06): explain OpenCL memory flags
-
