@@ -27,6 +27,7 @@ static cl::Device pick_first_device() {
 int main() {
     cl::Device device;
     cl::Program program;
+    bool program_ready = false;
     try {
         const size_t n = 1024;
         std::vector<float> a(n), b(n), c(n, 0.0f);
@@ -40,6 +41,7 @@ int main() {
         cl::CommandQueue queue(context, device);
 
         program = cl::Program(context, kKernelSource);
+        program_ready = true;
         program.build({device});
         cl::Kernel kernel(program, "vec_add");
 
@@ -65,7 +67,7 @@ int main() {
         std::cout << (ok ? "Vector add verified.\n" : "Vector add failed.\n");
         return ok ? EXIT_SUCCESS : EXIT_FAILURE;
     } catch (const cl::Error& e) {
-        if (e.err() == CL_BUILD_PROGRAM_FAILURE && program() != nullptr) {
+        if (e.err() == CL_BUILD_PROGRAM_FAILURE && program_ready) {
             std::cerr << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device) << "\n";
         }
         std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")\n";
