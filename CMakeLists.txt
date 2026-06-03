@@ -21,6 +21,7 @@ add_subdirectory(tasks/14_multi_device_parallel)
 add_subdirectory(tasks_cpp)
 add_subdirectory(performance_benchmark)
 add_subdirectory(lorenz_comparison)
+add_subdirectory(pso-opencl)
 
 add_executable(opencl_device_report src/main.cpp)
 target_compile_features(opencl_device_report PRIVATE cxx_std_11)
