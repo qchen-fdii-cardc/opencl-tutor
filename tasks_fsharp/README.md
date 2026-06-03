@@ -15,4 +15,3 @@ dotnet build .\OpenCL.Tasks.FSharp.slnx
 `powershell
 dotnet run --project .\03_vector_add_kernel\03_vector_add_kernel.fsproj
 `
-

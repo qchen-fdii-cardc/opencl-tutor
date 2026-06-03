@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(opencl_learning_path LANGUAGES CXX)
 
+find_package(OpenCL REQUIRED)
+
 add_subdirectory(tasks/01_platform_device_inventory)
 add_subdirectory(tasks/02_context_and_queue)
 add_subdirectory(tasks/03_vector_add_kernel)
@@ -17,3 +19,7 @@ add_subdirectory(tasks/13_nongraphics_apps)
 add_subdirectory(tasks/14_multi_device_parallel)
 
 add_subdirectory(tasks_cpp)
+
+add_executable(opencl_device_report src/main.cpp)
+target_compile_features(opencl_device_report PRIVATE cxx_std_11)
+target_link_libraries(opencl_device_report PRIVATE OpenCL::OpenCL)
