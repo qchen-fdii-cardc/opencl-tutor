@@ -15,3 +15,5 @@ add_subdirectory(tasks/11_gaussian_blur)
 add_subdirectory(tasks/12_extensions)
 add_subdirectory(tasks/13_nongraphics_apps)
 add_subdirectory(tasks/14_multi_device_parallel)
+
+add_subdirectory(tasks_cpp)
