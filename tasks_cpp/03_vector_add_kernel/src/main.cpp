@@ -1,11 +1,5 @@
-#define CL_HPP_ENABLE_EXCEPTIONS
-#define CL_HPP_TARGET_OPENCL_VERSION 120
-#define CL_HPP_MINIMUM_OPENCL_VERSION 120
-#if __has_include(<CL/cl.hpp>)
+#define __CL_ENABLE_EXCEPTIONS
 #include <CL/cl.hpp>
-#else
-#include <CL/opencl.hpp>
-#endif
 
 #include <cmath>
 #include <cstdlib>
