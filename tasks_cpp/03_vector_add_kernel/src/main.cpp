@@ -25,6 +25,8 @@ static cl::Device pick_first_device() {
 }
 
 int main() {
+    cl::Device device;
+    cl::Program program;
     try {
         const size_t n = 1024;
         std::vector<float> a(n), b(n), c(n, 0.0f);
@@ -33,11 +35,11 @@ int main() {
             b[i] = static_cast<float>(2 * i);
         }
 
-        const cl::Device device = pick_first_device();
+        device = pick_first_device();
         cl::Context context(device);
         cl::CommandQueue queue(context, device);
 
-        cl::Program program(context, kKernelSource);
+        program = cl::Program(context, kKernelSource);
         program.build({device});
         cl::Kernel kernel(program, "vec_add");
 
@@ -62,12 +64,10 @@ int main() {
 
         std::cout << (ok ? "Vector add verified.\n" : "Vector add failed.\n");
         return ok ? EXIT_SUCCESS : EXIT_FAILURE;
-    } catch (const cl::BuildError& e) {
-        for (size_t i = 0; i < e.getBuildLog().size(); ++i) {
-            std::cerr << e.getBuildLog()[i].second << "\n";
-        }
-        return EXIT_FAILURE;
     } catch (const cl::Error& e) {
+        if (e.err() == CL_BUILD_PROGRAM_FAILURE && program() != nullptr) {
+            std::cerr << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device) << "\n";
+        }
         std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")\n";
         return EXIT_FAILURE;
     } catch (const std::exception& e) {
