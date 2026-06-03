@@ -10,8 +10,8 @@
 
 - OpenCL 的平台模型：一个系统可以暴露多个平台，每个平台通常代表一个厂商实现。
 - OpenCL 的设备模型：平台下面可以挂载 CPU、GPU、加速器等不同设备。
-- 如何用 `clGetPlatformIDs` 和 `clGetDeviceIDs` 进行枚举。
-- 如何用 `clGetPlatformInfo` 和 `clGetDeviceInfo` 读取字符串信息和设备属性。
+- 如何用 `cl::Platform::get` 和 `platform.getDevices(...)` 进行枚举。
+- 如何用 `platform.getInfo<...>()` 和 `device.getInfo<...>()` 读取字符串信息和设备属性。
 - 如何处理“没有平台”“没有设备”“查询失败”等基础错误场景。
 
 ## 概念说明
@@ -33,47 +33,44 @@ Device 是真正执行 OpenCL 计算的硬件或虚拟计算单元。常见类�
 
 “枚举”就是先问系统“有多少个平台”，再取出平台列表；然后对每个平台继续问“有多少设备”，再取出设备列表。这个模式在 OpenCL 中非常常见。
 
-## 本任务使用的函数
+## 本任务使用的 C++ API
 
-### `clGetPlatformIDs`
+### `cl::Platform::get`
 
-作用：获取系统中的 OpenCL 平台数量，并在需要时把平台句柄写入数组。
+作用：获取系统中的 OpenCL 平台对象列表。
 
 典型调用方式：
 
 ```cpp
-cl_uint platform_count = 0;
-cl_int err = clGetPlatformIDs(0, nullptr, &platform_count);
+std::vector<cl::Platform> platforms;
+cl::Platform::get(&platforms);
 ```
 
 参数说明：
 
-- 第一个参数 `0` 表示只查询数量，不取实际列表。
-- 第二个参数 `nullptr` 表示不写出平台数组。
-- 第三个参数用于接收平台数量。
+- `platforms` 会被填充为当前系统可见的平台对象列表。
+- 平台数量可通过 `platforms.size()` 获取。
 
 返回值：
 
-- `CL_SUCCESS` 表示成功。
-- 失败时会返回错误码，例如没有 OpenCL 运行时或驱动异常。
+- 成功时列表非空；失败通常通过异常体现（启用异常时）。
 
-### `clGetPlatformInfo`
+### `platform.getInfo<CL_PLATFORM_NAME>()`
 
 作用：查询平台信息，例如平台名称。
 
 本任务中使用了 `CL_PLATFORM_NAME` 来打印平台名。调用流程是先查询字符串长度，再分配缓冲区，最后再次读取字符串。
 
-### `clGetDeviceIDs`
+### `platform.getDevices(...)`
 
 作用：查询某个平台下有哪些设备。
 
 本任务中使用了：
 
 - `CL_DEVICE_TYPE_ALL`：列出所有类型的设备。
-- 第一次调用只查询设备数量。
-- 第二次调用把设备句柄写入数组。
+- 通过 `platform.getDevices(CL_DEVICE_TYPE_ALL, &devices)` 一次获取设备对象列表。
 
-### `clGetDeviceInfo`
+### `device.getInfo<...>()`
 
 作用：查询设备属性。
 
@@ -108,23 +105,23 @@ cl_int err = clGetPlatformIDs(0, nullptr, &platform_count);
 
 ### 1. 先查询平台数量
 
-程序先调用一次 `clGetPlatformIDs(0, nullptr, &platform_count)`，这样就能知道系统里有多少个平台。
+程序先调用 `cl::Platform::get(&platforms)`，再通过 `platforms.size()` 得到平台数量。
 
 ### 2. 再读取平台列表
 
-当平台数量大于 0 时，程序创建 `std::vector<cl_platform_id>`，然后再次调用 `clGetPlatformIDs` 把平台句柄填进去。
+平台对象会直接存放在 `std::vector<cl::Platform>` 中，不需要手动管理底层 C 句柄数组。
 
 ### 3. 打印平台名称
 
-`get_platform_name` 会先用 `clGetPlatformInfo(..., 0, nullptr, &size)` 取得字符串长度，再分配 `std::vector<char>`，最后读取平台名。
+平台名可通过 `platform.getInfo<CL_PLATFORM_NAME>()` 直接获取。
 
 ### 4. 查询每个平台下的设备
 
-对每个平台调用 `clGetDeviceIDs(platform, CL_DEVICE_TYPE_ALL, 0, nullptr, &device_count)` 先查数量，再用第二次调用拿到设备列表。
+对每个平台调用 `platform.getDevices(CL_DEVICE_TYPE_ALL, &devices)` 获取设备列表。
 
 ### 5. 打印设备名称和设备类型
 
-`get_device_name` 读取 `CL_DEVICE_NAME`，`device_type_to_string` 把 `CL_DEVICE_TYPE` 的结果翻译成更易读的文本。
+`device.getInfo<CL_DEVICE_NAME>()` 读取设备名，`device.getInfo<CL_DEVICE_TYPE>()` 的结果可翻译成更易读文本。
 
 ### 6. 处理失败和空结果
 
@@ -141,7 +138,7 @@ cl_int err = clGetPlatformIDs(0, nullptr, &platform_count);
 
 这里的判断顺序是有意义的，因为一个设备类型值可能包含某些位标志。当前实现以最常见的类型优先匹配。
 
-### `get_platform_name(cl_platform_id platform)`
+### `get_platform_name(const cl::Platform& platform)`
 
 这个函数负责读取平台名称。
 
@@ -152,9 +149,9 @@ cl_int err = clGetPlatformIDs(0, nullptr, &platform_count);
 3. 再次读取平台名。
 4. 把 `char` 缓冲区转换成 `std::string`。
 
-这种“两步查询长度再读取内容”的模式，在 OpenCL 中非常常见。
+在 C++ API 中，也可以直接使用 `platform.getInfo<CL_PLATFORM_NAME>()` 获得字符串结果。
 
-### `get_device_name(cl_device_id device)`
+### `get_device_name(const cl::Device& device)`
 
 这个函数与 `get_platform_name` 类似，只是读取的是设备名而不是平台名。
 
@@ -173,7 +170,7 @@ cl_int err = clGetPlatformIDs(0, nullptr, &platform_count);
 
 ### 先查数量，再分配容器
 
-OpenCL 的很多枚举 API 都采用“先问数量，再写数组”的设计。这样可以避免盲目分配，也能适应运行时返回的动态数量。
+在 C API 里常见“先问数量再写数组”；在本任务使用的 C++ API 里，`std::vector` + `get(...)`/`getDevices(...)` 已经封装了这一步。
 
 ### 使用 `std::vector`
 
@@ -191,7 +188,7 @@ OpenCL 的很多枚举 API 都采用“先问数量，再写数组”的设计�
 OpenCL platform count: 1
 
 [Platform 0] NVIDIA CUDA
-	- Device 0: NVIDIA GeForce RTX 3070 [GPU]
+ - Device 0: NVIDIA GeForce RTX 3070 [GPU]
 ```
 
 说明：
@@ -210,7 +207,7 @@ No OpenCL platform found.
 
 ## 常见问题
 
-### 1. `clGetPlatformIDs failed`
+### 1. `cl::Platform::get` 失败
 
 可能原因：
 
@@ -255,4 +252,3 @@ cmake --build build/task01 --config Debug
 ## 下一步
 
 完成这个任务后，下一步就是“创建上下文与命令队列”。那时你会开始真正持有 OpenCL 资源，并为后续 kernel 执行做准备。
-

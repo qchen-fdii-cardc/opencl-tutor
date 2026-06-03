@@ -12,8 +12,8 @@
 - **特性门控**：根据扩展决定是否启用高级路径。
 
 ## 关键函数与常量
-- `clGetDeviceInfo(..., CL_DEVICE_EXTENSIONS, ...)`
-- `clGetDeviceInfo(..., CL_DEVICE_OPENCL_C_VERSION, ...)`
+- `device.getInfo<CL_DEVICE_EXTENSIONS>()`
+- `device.getInfo<CL_DEVICE_OPENCL_C_VERSION>()`
 - `CL_DEVICE_NAME`
 
 ## 代码实现思路

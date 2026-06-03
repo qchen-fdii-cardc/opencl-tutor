@@ -12,8 +12,8 @@ OpenCL 不只用于图像；金融仿真、科学计算、统计采样都属于�
 - **主机归约**：设备输出局部结果，主机做最终汇总。
 
 ## 关键函数与常量
-- `clEnqueueNDRangeKernel`
-- `clEnqueueReadBuffer`
+- `queue.enqueueNDRangeKernel(...)`
+- `queue.enqueueReadBuffer(...)`
 - Kernel 侧随机数推进（LCG）
 
 ## 代码实现思路

@@ -12,7 +12,7 @@
 - **正确性优先**：先保证结果一致，再做优化。
 
 ## 关键函数与常量
-- `clEnqueueNDRangeKernel`（2D）
+- `queue.enqueueNDRangeKernel`（2D）
 - `get_global_id(0/1)`
 - `CL_MEM_READ_ONLY` / `CL_MEM_WRITE_ONLY`
 

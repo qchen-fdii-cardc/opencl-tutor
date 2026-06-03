@@ -10,11 +10,11 @@ OpenCL 性能很大程度取决于数据搬运策略，理解 Buffer 标志是�
 - **USE_HOST_PTR**：复用主机地址，适合稳定内存。
 - **COPY_HOST_PTR**：创建时复制一份设备侧初值。
 - **ALLOC_HOST_PTR**：为映射访问分配适配内存。
-- **Map/Unmap**：通过 `clEnqueueMapBuffer` 访问设备缓冲区。
+- **Map/Unmap**：通过 `queue.enqueueMapBuffer(...)` / `queue.enqueueUnmapMemObject(...)` 访问设备缓冲区。
 
 ## 关键函数与常量
-- `clCreateBuffer`
-- `clEnqueueMapBuffer` / `clEnqueueUnmapMemObject`
+- `cl::Buffer`
+- `queue.enqueueMapBuffer(...)` / `queue.enqueueUnmapMemObject(...)`
 - `CL_MAP_READ`
 - `CL_MEM_USE_HOST_PTR` / `CL_MEM_COPY_HOST_PTR` / `CL_MEM_ALLOC_HOST_PTR`
 
@@ -36,5 +36,5 @@ cmake --build build --config Debug
 - 输出 `Memory task verified.`。
 
 ## 常见错误与排查
-- map 返回空指针：检查 `clEnqueueMapBuffer` 返回码。
+- map 返回空指针：检查 `queue.enqueueMapBuffer(...)` 调用参数与异常信息。
 - 数值不一致：检查 buffer 创建标志与参数顺序。

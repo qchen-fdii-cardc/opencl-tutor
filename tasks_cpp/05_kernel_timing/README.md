@@ -12,9 +12,9 @@
 - **计算与传输分离**：本任务仅统计 Kernel 执行段。
 
 ## 关键函数与常量
-- `clCreateCommandQueue(..., CL_QUEUE_PROFILING_ENABLE, ...)`
-- `clEnqueueNDRangeKernel(..., &event)`
-- `clGetEventProfilingInfo`
+- `cl::CommandQueue(context, device, queue_props)`（启用 `CL_QUEUE_PROFILING_ENABLE`）
+- `queue.enqueueNDRangeKernel(..., nullptr, &event)`
+- `event.getProfilingInfo<...>()`
 - `CL_PROFILING_COMMAND_START` / `CL_PROFILING_COMMAND_END`
 
 ## 代码实现思路
@@ -37,4 +37,4 @@ cmake --build build --config Debug
 
 ## 常见错误与排查
 - profiling 时间为 0：确认队列启用了 `CL_QUEUE_PROFILING_ENABLE`。
-- `clGetEventProfilingInfo` 失败：确认事件来自可 profiling 队列。
+- `event.getProfilingInfo<...>()` 失败：确认事件来自可 profiling 队列。

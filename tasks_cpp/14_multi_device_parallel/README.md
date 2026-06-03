@@ -12,9 +12,9 @@
 - **结果合并**：按切片偏移写回总结果。
 
 ## 关键函数与常量
-- `clGetDeviceIDs`：枚举设备池。
-- `clCreateContext` / `clCreateCommandQueue`：每设备资源创建。
-- `clEnqueueNDRangeKernel`：每设备执行对应 chunk。
+- `platform.getDevices(...)`：枚举设备池。
+- `cl::Context` / `cl::CommandQueue`：每设备资源创建。
+- `queue.enqueueNDRangeKernel(...)`：每设备执行对应 chunk。
 
 ## 代码实现思路
 1. 枚举设备并取前 2 个（若不足则降级）。

@@ -13,7 +13,7 @@
 
 ## 关键函数与常量
 - C++ `std::chrono`（CPU 计时）
-- `clGetEventProfilingInfo`（OpenCL 计时）
+- `event.getProfilingInfo<...>()`（OpenCL 计时）
 - `CL_QUEUE_PROFILING_ENABLE`
 
 ## 代码实现思路
