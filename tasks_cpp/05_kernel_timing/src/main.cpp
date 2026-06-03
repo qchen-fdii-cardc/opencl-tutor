@@ -6,31 +6,37 @@
 #include <stdexcept>
 #include <vector>
 
-static const char* kKernelSource =
+static const char *kKernelSource =
     "__kernel void scale(__global float* x, float alpha) {"
     "  const int gid = get_global_id(0);"
     "  x[gid] *= alpha;"
     "}";
 
-static cl::Device pick_first_device() {
+static cl::Device pick_first_device()
+{
     std::vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);
-    for (size_t i = 0; i < platforms.size(); ++i) {
+    for (size_t i = 0; i < platforms.size(); ++i)
+    {
         std::vector<cl::Device> devices;
         platforms[i].getDevices(CL_DEVICE_TYPE_ALL, &devices);
-        if (!devices.empty()) return devices[0];
+        if (!devices.empty())
+            return devices[0];
     }
     throw std::runtime_error("No usable OpenCL device found.");
 }
 
-int main() {
-    try {
+int main()
+{
+    try
+    {
         const size_t n = 1 << 20;
         std::vector<float> data(n, 1.0f);
 
         const cl::Device device = pick_first_device();
         cl::Context context(device);
-        cl::CommandQueue queue(context, device, CL_QUEUE_PROFILING_ENABLE);
+        const cl_queue_properties queue_props[] = {CL_QUEUE_PROPERTIES, CL_QUEUE_PROFILING_ENABLE, 0};
+        cl::CommandQueue queue(context, device, queue_props);
         cl::Program program(context, kKernelSource);
         program.build({device});
         cl::Kernel kernel(program, "scale");
@@ -49,10 +55,14 @@ int main() {
 
         std::cout << "Kernel execution time: " << kernel_ms << " ms\n";
         return EXIT_SUCCESS;
-    } catch (const cl::Error& e) {
+    }
+    catch (const cl::Error &e)
+    {
         std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")\n";
         return EXIT_FAILURE;
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         std::cerr << e.what() << "\n";
         return EXIT_FAILURE;
     }
