@@ -1,149 +1,91 @@
+#define CL_HPP_ENABLE_EXCEPTIONS
+#define CL_HPP_TARGET_OPENCL_VERSION 120
+#define CL_HPP_MINIMUM_OPENCL_VERSION 120
 #if __has_include(<CL/cl.hpp>)
 #include <CL/cl.hpp>
 #else
 #include <CL/opencl.hpp>
 #endif
 
+#include <cmath>
+#include <array>
 #include <cstdlib>
-#include <cstring>
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 static const char* kKernelSource =
     "__constant sampler_t smp = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;"
-    "__kernel void invert_image(read_only image2d_t src, write_only image2d_t dst) {"
-    "  int2 coord = (int2)(get_global_id(0), get_global_id(1));"
-    "  uint4 px = read_imageui(src, smp, coord);"
-    "  px.x = 255 - px.x;"
-    "  px.y = 255 - px.y;"
-    "  px.z = 255 - px.z;"
-    "  write_imageui(dst, coord, px);"
+    "__kernel void copy_image(read_only image2d_t src, write_only image2d_t dst) {"
+    "  int2 pos = (int2)(get_global_id(0), get_global_id(1));"
+    "  float4 p = read_imagef(src, smp, pos);"
+    "  write_imagef(dst, pos, p);"
     "}";
 
-static bool pick_first_device(cl_device_id* out_device) {
-    cl_uint platform_count = 0;
-    if (clGetPlatformIDs(0, nullptr, &platform_count) != CL_SUCCESS || platform_count == 0) return false;
-    std::vector<cl_platform_id> platforms(platform_count);
-    if (clGetPlatformIDs(platform_count, platforms.data(), nullptr) != CL_SUCCESS) return false;
-    for (cl_uint i = 0; i < platform_count; ++i) {
-        cl_uint device_count = 0;
-        if (clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, 0, nullptr, &device_count) != CL_SUCCESS ||
-            device_count == 0) {
-            continue;
-        }
-        std::vector<cl_device_id> devices(device_count);
-        if (clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, device_count, devices.data(), nullptr) == CL_SUCCESS) {
-            *out_device = devices[0];
-            return true;
-        }
+static cl::Device pick_first_device() {
+    std::vector<cl::Platform> platforms;
+    cl::Platform::get(&platforms);
+    for (size_t i = 0; i < platforms.size(); ++i) {
+        std::vector<cl::Device> devices;
+        platforms[i].getDevices(CL_DEVICE_TYPE_ALL, &devices);
+        if (!devices.empty()) return devices[0];
     }
-    return false;
+    throw std::runtime_error("No usable OpenCL device found.");
 }
 
 int main() {
-    const size_t width = 16;
-    const size_t height = 16;
-    const size_t pixel_bytes = 4;
-    const size_t bytes = width * height * pixel_bytes;
-
-    std::vector<unsigned char> src(bytes, 0);
-    std::vector<unsigned char> dst(bytes, 0);
-    for (size_t y = 0; y < height; ++y) {
-        for (size_t x = 0; x < width; ++x) {
-            const size_t idx = (y * width + x) * pixel_bytes;
-            src[idx + 0] = static_cast<unsigned char>((x * 13) & 0xFF);
-            src[idx + 1] = static_cast<unsigned char>((y * 17) & 0xFF);
-            src[idx + 2] = static_cast<unsigned char>(((x + y) * 7) & 0xFF);
-            src[idx + 3] = 255;
+    try {
+        const int w = 32;
+        const int h = 32;
+        const size_t pixels = static_cast<size_t>(w * h);
+        std::vector<cl_float4> src(pixels), dst(pixels);
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                cl_float4 p;
+                p.s[0] = static_cast<float>(x) / w;
+                p.s[1] = static_cast<float>(y) / h;
+                p.s[2] = 0.5f;
+                p.s[3] = 1.0f;
+                src[static_cast<size_t>(y * w + x)] = p;
+            }
         }
-    }
 
-    cl_device_id device = nullptr;
-    if (!pick_first_device(&device)) {
-        std::cerr << "No usable OpenCL device found.\n";
-        return EXIT_FAILURE;
-    }
+        const cl::Device device = pick_first_device();
+        cl::Context context(device);
+        cl::CommandQueue queue(context, device);
+        cl::Program program(context, kKernelSource);
+        program.build({device});
+        cl::Kernel kernel(program, "copy_image");
 
-    cl_int err = CL_SUCCESS;
-    cl_context context = clCreateContext(nullptr, 1, &device, nullptr, nullptr, &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-    cl_command_queue queue = clCreateCommandQueue(context, device, 0, &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
+        cl::ImageFormat fmt(CL_RGBA, CL_FLOAT);
+        cl::Image2D src_img(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, fmt, w, h, 0, src.data());
+        cl::Image2D dst_img(context, CL_MEM_WRITE_ONLY, fmt, w, h);
 
-    cl_program program = clCreateProgramWithSource(context, 1, &kKernelSource, nullptr, &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-    err = clBuildProgram(program, 1, &device, nullptr, nullptr, nullptr);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
+        kernel.setArg(0, src_img);
+        kernel.setArg(1, dst_img);
 
-    cl_kernel kernel = clCreateKernel(program, "invert_image", &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
+        queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(w, h), cl::NullRange);
 
-    cl_image_format format;
-    format.image_channel_order = CL_RGBA;
-    format.image_channel_data_type = CL_UNSIGNED_INT8;
+        std::array<size_t, 3> origin = {{0, 0, 0}};
+        std::array<size_t, 3> region = {{static_cast<size_t>(w), static_cast<size_t>(h), 1}};
+        queue.enqueueReadImage(dst_img, CL_TRUE, origin, region, 0, 0, dst.data());
 
-    cl_image_desc desc;
-    std::memset(&desc, 0, sizeof(desc));
-    desc.image_type = CL_MEM_OBJECT_IMAGE2D;
-    desc.image_width = width;
-    desc.image_height = height;
-
-    cl_mem src_image = clCreateImage(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                     &format, &desc, src.data(), &err);
-    if (err != CL_SUCCESS || src_image == nullptr) {
-        clReleaseKernel(kernel);
-        clReleaseProgram(program);
-        clReleaseCommandQueue(queue);
-        clReleaseContext(context);
-        return EXIT_FAILURE;
-    }
-    cl_mem dst_image = clCreateImage(context, CL_MEM_WRITE_ONLY, &format, &desc, nullptr, &err);
-    if (err != CL_SUCCESS || dst_image == nullptr) {
-        clReleaseMemObject(src_image);
-        clReleaseKernel(kernel);
-        clReleaseProgram(program);
-        clReleaseCommandQueue(queue);
-        clReleaseContext(context);
-        return EXIT_FAILURE;
-    }
-
-    err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &src_image);
-    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &dst_image);
-    if (err != CL_SUCCESS) {
-        clReleaseMemObject(dst_image);
-        clReleaseMemObject(src_image);
-        clReleaseKernel(kernel);
-        clReleaseProgram(program);
-        clReleaseCommandQueue(queue);
-        clReleaseContext(context);
-        return EXIT_FAILURE;
-    }
-
-    size_t global_size[2] = {width, height};
-    err = clEnqueueNDRangeKernel(queue, kernel, 2, nullptr, global_size, nullptr, 0, nullptr, nullptr);
-    if (err == CL_SUCCESS) {
-        const size_t origin[3] = {0, 0, 0};
-        const size_t region[3] = {width, height, 1};
-        err = clEnqueueReadImage(queue, dst_image, CL_TRUE, origin, region, 0, 0, dst.data(), 0, nullptr, nullptr);
-    }
-
-    bool ok = (err == CL_SUCCESS);
-    for (size_t i = 0; ok && i < bytes; i += pixel_bytes) {
-        if (dst[i + 0] != static_cast<unsigned char>(255 - src[i + 0]) ||
-            dst[i + 1] != static_cast<unsigned char>(255 - src[i + 1]) ||
-            dst[i + 2] != static_cast<unsigned char>(255 - src[i + 2]) ||
-            dst[i + 3] != src[i + 3]) {
-            ok = false;
+        bool ok = true;
+        for (size_t i = 0; i < pixels; ++i) {
+            if (std::fabs(dst[i].s[0] - src[i].s[0]) > 1e-6f ||
+                std::fabs(dst[i].s[1] - src[i].s[1]) > 1e-6f) {
+                ok = false;
+                break;
+            }
         }
+
+        std::cout << (ok ? "Image and sampler task verified.\n" : "Image and sampler task failed.\n");
+        return ok ? EXIT_SUCCESS : EXIT_FAILURE;
+    } catch (const cl::Error& e) {
+        std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")\n";
+        return EXIT_FAILURE;
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << "\n";
+        return EXIT_FAILURE;
     }
-
-    std::cout << (ok ? "Image sampler task verified.\n" : "Image sampler task failed.\n");
-
-    clReleaseMemObject(dst_image);
-    clReleaseMemObject(src_image);
-    clReleaseKernel(kernel);
-    clReleaseProgram(program);
-    clReleaseCommandQueue(queue);
-    clReleaseContext(context);
-    return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

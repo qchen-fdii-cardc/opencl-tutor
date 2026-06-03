@@ -1,3 +1,6 @@
+#define CL_HPP_ENABLE_EXCEPTIONS
+#define CL_HPP_TARGET_OPENCL_VERSION 120
+#define CL_HPP_MINIMUM_OPENCL_VERSION 120
 #if __has_include(<CL/cl.hpp>)
 #include <CL/cl.hpp>
 #else
@@ -10,60 +13,37 @@
 #include <string>
 #include <vector>
 
-static std::string query_device_string(cl_device_id device, cl_device_info param) {
-    size_t size = 0;
-    if (clGetDeviceInfo(device, param, 0, nullptr, &size) != CL_SUCCESS || size == 0) {
-        return "";
-    }
-    std::vector<char> buf(size, '\0');
-    if (clGetDeviceInfo(device, param, size, buf.data(), nullptr) != CL_SUCCESS) {
-        return "";
-    }
-    return std::string(buf.data());
-}
-
 int main() {
-    cl_uint platform_count = 0;
-    cl_int err = clGetPlatformIDs(0, nullptr, &platform_count);
-    if (err != CL_SUCCESS || platform_count == 0) {
-        std::cerr << "No OpenCL platform found.\n";
-        return EXIT_FAILURE;
-    }
+    try {
+        std::vector<cl::Platform> platforms;
+        cl::Platform::get(&platforms);
 
-    std::vector<cl_platform_id> platforms(platform_count);
-    if (clGetPlatformIDs(platform_count, platforms.data(), nullptr) != CL_SUCCESS) {
-        return EXIT_FAILURE;
-    }
-
-    for (cl_uint p = 0; p < platform_count; ++p) {
-        cl_uint device_count = 0;
-        if (clGetDeviceIDs(platforms[p], CL_DEVICE_TYPE_ALL, 0, nullptr, &device_count) != CL_SUCCESS ||
-            device_count == 0) {
-            continue;
+        if (platforms.empty()) {
+            std::cout << "No OpenCL platforms found.\n";
+            return EXIT_SUCCESS;
         }
 
-        std::vector<cl_device_id> devices(device_count);
-        if (clGetDeviceIDs(platforms[p], CL_DEVICE_TYPE_ALL, device_count, devices.data(), nullptr) != CL_SUCCESS) {
-            continue;
-        }
+        for (size_t p = 0; p < platforms.size(); ++p) {
+            std::cout << "[Platform " << p << "] "
+                      << platforms[p].getInfo<CL_PLATFORM_NAME>() << "\n";
 
-        for (cl_uint d = 0; d < device_count; ++d) {
-            std::string name = query_device_string(devices[d], CL_DEVICE_NAME);
-            std::string c_version = query_device_string(devices[d], CL_DEVICE_OPENCL_C_VERSION);
-            std::string extensions = query_device_string(devices[d], CL_DEVICE_EXTENSIONS);
-
-            std::cout << "Device: " << name << "\n";
-            std::cout << "  OpenCL C version: " << c_version << "\n";
-            std::cout << "  Extensions:\n";
-
-            std::istringstream iss(extensions);
-            std::string ext;
-            while (iss >> ext) {
-                std::cout << "    - " << ext << "\n";
+            std::vector<cl::Device> devices;
+            platforms[p].getDevices(CL_DEVICE_TYPE_ALL, &devices);
+            for (size_t d = 0; d < devices.size(); ++d) {
+                const std::string name = devices[d].getInfo<CL_DEVICE_NAME>();
+                const std::string exts = devices[d].getInfo<CL_DEVICE_EXTENSIONS>();
+                std::istringstream iss(exts);
+                size_t count = 0;
+                std::string token;
+                while (iss >> token) ++count;
+                std::cout << "  - Device " << d << ": " << name
+                          << ", extension count=" << count << "\n";
             }
-            std::cout << "\n";
         }
-    }
 
-    return EXIT_SUCCESS;
+        return EXIT_SUCCESS;
+    } catch (const cl::Error& e) {
+        std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")\n";
+        return EXIT_FAILURE;
+    }
 }

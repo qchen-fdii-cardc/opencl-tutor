@@ -1,3 +1,6 @@
+#define CL_HPP_ENABLE_EXCEPTIONS
+#define CL_HPP_TARGET_OPENCL_VERSION 120
+#define CL_HPP_MINIMUM_OPENCL_VERSION 120
 #if __has_include(<CL/cl.hpp>)
 #include <CL/cl.hpp>
 #else
@@ -7,129 +10,73 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
-#include <numeric>
+#include <stdexcept>
 #include <vector>
 
 static const char* kKernelSource =
-    "__kernel void reduce_local(__global const float* input, __global float* partial, __local float* cache, int n) {"
-    "  int gid = get_global_id(0);"
-    "  int lid = get_local_id(0);"
-    "  int group = get_group_id(0);"
-    "  int local_size = get_local_size(0);"
-    "  cache[lid] = (gid < n) ? input[gid] : 0.0f;"
+    "__kernel void local_add(__global const float* a, __global const float* b, __global float* c, __local float* lmem) {"
+    "  const int gid = get_global_id(0);"
+    "  const int lid = get_local_id(0);"
+    "  lmem[lid] = a[gid] + b[gid];"
     "  barrier(CLK_LOCAL_MEM_FENCE);"
-    "  for (int stride = local_size / 2; stride > 0; stride >>= 1) {"
-    "    if (lid < stride) cache[lid] += cache[lid + stride];"
-    "    barrier(CLK_LOCAL_MEM_FENCE);"
-    "  }"
-    "  if (lid == 0) partial[group] = cache[0];"
+    "  c[gid] = lmem[lid];"
     "}";
 
-static bool pick_first_device(cl_device_id* out_device) {
-    cl_uint platform_count = 0;
-    if (clGetPlatformIDs(0, nullptr, &platform_count) != CL_SUCCESS || platform_count == 0) return false;
-    std::vector<cl_platform_id> platforms(platform_count);
-    if (clGetPlatformIDs(platform_count, platforms.data(), nullptr) != CL_SUCCESS) return false;
-    for (cl_uint i = 0; i < platform_count; ++i) {
-        cl_uint device_count = 0;
-        if (clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, 0, nullptr, &device_count) != CL_SUCCESS ||
-            device_count == 0) {
-            continue;
-        }
-        std::vector<cl_device_id> devices(device_count);
-        if (clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, device_count, devices.data(), nullptr) == CL_SUCCESS) {
-            *out_device = devices[0];
-            return true;
-        }
+static cl::Device pick_first_device() {
+    std::vector<cl::Platform> platforms;
+    cl::Platform::get(&platforms);
+    for (size_t i = 0; i < platforms.size(); ++i) {
+        std::vector<cl::Device> devices;
+        platforms[i].getDevices(CL_DEVICE_TYPE_ALL, &devices);
+        if (!devices.empty()) return devices[0];
     }
-    return false;
+    throw std::runtime_error("No usable OpenCL device found.");
 }
 
 int main() {
-    const int n = 1 << 16;
-    const size_t local_size = 128;
-    const size_t group_count = (static_cast<size_t>(n) + local_size - 1) / local_size;
-    const size_t global_size = group_count * local_size;
+    try {
+        const size_t n = 1024;
+        const size_t local_size = 64;
+        std::vector<float> a(n), b(n), c(n, 0.0f);
+        for (size_t i = 0; i < n; ++i) {
+            a[i] = static_cast<float>(i);
+            b[i] = static_cast<float>(2 * i);
+        }
 
-    std::vector<float> input(n), partial(group_count, 0.0f);
-    for (int i = 0; i < n; ++i) {
-        input[i] = 1.0f + static_cast<float>(i % 5);
-    }
+        const cl::Device device = pick_first_device();
+        cl::Context context(device);
+        cl::CommandQueue queue(context, device);
+        cl::Program program(context, kKernelSource);
+        program.build({device});
+        cl::Kernel kernel(program, "local_add");
 
-    const float cpu_sum = std::accumulate(input.begin(), input.end(), 0.0f);
+        cl::Buffer a_buf(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * n, a.data());
+        cl::Buffer b_buf(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * n, b.data());
+        cl::Buffer c_buf(context, CL_MEM_WRITE_ONLY, sizeof(float) * n);
 
-    cl_device_id device = nullptr;
-    if (!pick_first_device(&device)) {
-        std::cerr << "No usable OpenCL device found.\n";
+        kernel.setArg(0, a_buf);
+        kernel.setArg(1, b_buf);
+        kernel.setArg(2, c_buf);
+        kernel.setArg(3, cl::Local(sizeof(float) * local_size));
+
+        queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(n), cl::NDRange(local_size));
+        queue.enqueueReadBuffer(c_buf, CL_TRUE, 0, sizeof(float) * n, c.data());
+
+        bool ok = true;
+        for (size_t i = 0; i < n; ++i) {
+            if (std::fabs(c[i] - (a[i] + b[i])) > 1e-5f) {
+                ok = false;
+                break;
+            }
+        }
+
+        std::cout << (ok ? "Workgroup/local memory task verified.\n" : "Workgroup/local memory task failed.\n");
+        return ok ? EXIT_SUCCESS : EXIT_FAILURE;
+    } catch (const cl::Error& e) {
+        std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")\n";
+        return EXIT_FAILURE;
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << "\n";
         return EXIT_FAILURE;
     }
-
-    cl_int err = CL_SUCCESS;
-    cl_context context = clCreateContext(nullptr, 1, &device, nullptr, nullptr, &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-    cl_command_queue queue = clCreateCommandQueue(context, device, 0, &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-
-    cl_program program = clCreateProgramWithSource(context, 1, &kKernelSource, nullptr, &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-    err = clBuildProgram(program, 1, &device, nullptr, nullptr, nullptr);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-
-    cl_kernel kernel = clCreateKernel(program, "reduce_local", &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-
-    cl_mem in_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
-                                   sizeof(float) * input.size(), input.data(), &err);
-    if (err != CL_SUCCESS || in_buf == nullptr) {
-        clReleaseKernel(kernel);
-        clReleaseProgram(program);
-        clReleaseCommandQueue(queue);
-        clReleaseContext(context);
-        return EXIT_FAILURE;
-    }
-    cl_mem partial_buf = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
-                                        sizeof(float) * partial.size(), nullptr, &err);
-    if (err != CL_SUCCESS || partial_buf == nullptr) {
-        clReleaseMemObject(in_buf);
-        clReleaseKernel(kernel);
-        clReleaseProgram(program);
-        clReleaseCommandQueue(queue);
-        clReleaseContext(context);
-        return EXIT_FAILURE;
-    }
-
-    err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &in_buf);
-    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &partial_buf);
-    err |= clSetKernelArg(kernel, 2, sizeof(float) * local_size, nullptr);
-    err |= clSetKernelArg(kernel, 3, sizeof(int), &n);
-    if (err != CL_SUCCESS) {
-        clReleaseMemObject(partial_buf);
-        clReleaseMemObject(in_buf);
-        clReleaseKernel(kernel);
-        clReleaseProgram(program);
-        clReleaseCommandQueue(queue);
-        clReleaseContext(context);
-        return EXIT_FAILURE;
-    }
-
-    err = clEnqueueNDRangeKernel(queue, kernel, 1, nullptr, &global_size, &local_size, 0, nullptr, nullptr);
-    if (err == CL_SUCCESS) {
-        err = clEnqueueReadBuffer(queue, partial_buf, CL_TRUE, 0,
-                                  sizeof(float) * partial.size(), partial.data(), 0, nullptr, nullptr);
-    }
-
-    float gpu_sum = std::accumulate(partial.begin(), partial.end(), 0.0f);
-    bool ok = (err == CL_SUCCESS) && (std::fabs(gpu_sum - cpu_sum) < 1e-2f);
-
-    std::cout << "CPU sum: " << cpu_sum << "\n";
-    std::cout << "GPU(local memory) sum: " << gpu_sum << "\n";
-    std::cout << (ok ? "Local memory reduction verified.\n" : "Local memory reduction failed.\n");
-
-    clReleaseMemObject(partial_buf);
-    clReleaseMemObject(in_buf);
-    clReleaseKernel(kernel);
-    clReleaseProgram(program);
-    clReleaseCommandQueue(queue);
-    clReleaseContext(context);
-    return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

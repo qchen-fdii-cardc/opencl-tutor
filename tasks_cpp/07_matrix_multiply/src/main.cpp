@@ -1,3 +1,6 @@
+#define CL_HPP_ENABLE_EXCEPTIONS
+#define CL_HPP_TARGET_OPENCL_VERSION 120
+#define CL_HPP_MINIMUM_OPENCL_VERSION 120
 #if __has_include(<CL/cl.hpp>)
 #include <CL/cl.hpp>
 #else
@@ -7,144 +10,85 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <stdexcept>
 #include <vector>
 
 static const char* kKernelSource =
-    "__kernel void mat_mul(__global const float* a, __global const float* b, __global float* c, int n) {"
-    "  int row = get_global_id(1);"
-    "  int col = get_global_id(0);"
-    "  if (row >= n || col >= n) return;"
+    "__kernel void matmul(__global const float* A, __global const float* B, __global float* C, int N) {"
+    "  const int row = get_global_id(0);"
+    "  const int col = get_global_id(1);"
     "  float sum = 0.0f;"
-    "  for (int k = 0; k < n; ++k) sum += a[row * n + k] * b[k * n + col];"
-    "  c[row * n + col] = sum;"
+    "  for (int k = 0; k < N; ++k) {"
+    "    sum += A[row * N + k] * B[k * N + col];"
+    "  }"
+    "  C[row * N + col] = sum;"
     "}";
 
-static bool pick_first_device(cl_device_id* out_device) {
-    cl_uint platform_count = 0;
-    if (clGetPlatformIDs(0, nullptr, &platform_count) != CL_SUCCESS || platform_count == 0) return false;
-    std::vector<cl_platform_id> platforms(platform_count);
-    if (clGetPlatformIDs(platform_count, platforms.data(), nullptr) != CL_SUCCESS) return false;
-    for (cl_uint i = 0; i < platform_count; ++i) {
-        cl_uint device_count = 0;
-        if (clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, 0, nullptr, &device_count) != CL_SUCCESS ||
-            device_count == 0) {
-            continue;
-        }
-        std::vector<cl_device_id> devices(device_count);
-        if (clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_ALL, device_count, devices.data(), nullptr) == CL_SUCCESS) {
-            *out_device = devices[0];
-            return true;
-        }
+static cl::Device pick_first_device() {
+    std::vector<cl::Platform> platforms;
+    cl::Platform::get(&platforms);
+    for (size_t i = 0; i < platforms.size(); ++i) {
+        std::vector<cl::Device> devices;
+        platforms[i].getDevices(CL_DEVICE_TYPE_ALL, &devices);
+        if (!devices.empty()) return devices[0];
     }
-    return false;
+    throw std::runtime_error("No usable OpenCL device found.");
 }
 
 int main() {
-    const int n = 32;
-    const size_t total = static_cast<size_t>(n) * static_cast<size_t>(n);
-    const size_t bytes = total * sizeof(float);
-
-    std::vector<float> a(total), b(total), c_gpu(total, 0.0f), c_cpu(total, 0.0f);
-    for (size_t i = 0; i < total; ++i) {
-        a[i] = static_cast<float>((i % 13) + 1);
-        b[i] = static_cast<float>((i % 7) + 1);
-    }
-
-    for (int row = 0; row < n; ++row) {
-        for (int col = 0; col < n; ++col) {
-            float sum = 0.0f;
-            for (int k = 0; k < n; ++k) {
-                sum += a[row * n + k] * b[k * n + col];
+    try {
+        const int N = 32;
+        const size_t elems = static_cast<size_t>(N * N);
+        std::vector<float> A(elems), B(elems), C(elems, 0.0f), ref(elems, 0.0f);
+        for (int r = 0; r < N; ++r) {
+            for (int c = 0; c < N; ++c) {
+                A[r * N + c] = static_cast<float>((r + c) % 7);
+                B[r * N + c] = static_cast<float>((r * 3 + c) % 11);
             }
-            c_cpu[row * n + col] = sum;
         }
-    }
 
-    cl_device_id device = nullptr;
-    if (!pick_first_device(&device)) {
-        std::cerr << "No usable OpenCL device found.\n";
-        return EXIT_FAILURE;
-    }
-
-    cl_int err = CL_SUCCESS;
-    cl_context context = clCreateContext(nullptr, 1, &device, nullptr, nullptr, &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-    cl_command_queue queue = clCreateCommandQueue(context, device, 0, &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-
-    cl_program program = clCreateProgramWithSource(context, 1, &kKernelSource, nullptr, &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-    err = clBuildProgram(program, 1, &device, nullptr, nullptr, nullptr);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-
-    cl_kernel kernel = clCreateKernel(program, "mat_mul", &err);
-    if (err != CL_SUCCESS) return EXIT_FAILURE;
-
-    cl_mem a_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bytes, a.data(), &err);
-    if (err != CL_SUCCESS || a_buf == nullptr) {
-        clReleaseKernel(kernel);
-        clReleaseProgram(program);
-        clReleaseCommandQueue(queue);
-        clReleaseContext(context);
-        return EXIT_FAILURE;
-    }
-    cl_mem b_buf = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, bytes, b.data(), &err);
-    if (err != CL_SUCCESS || b_buf == nullptr) {
-        clReleaseMemObject(a_buf);
-        clReleaseKernel(kernel);
-        clReleaseProgram(program);
-        clReleaseCommandQueue(queue);
-        clReleaseContext(context);
-        return EXIT_FAILURE;
-    }
-    cl_mem c_buf = clCreateBuffer(context, CL_MEM_WRITE_ONLY, bytes, nullptr, &err);
-    if (err != CL_SUCCESS || c_buf == nullptr) {
-        clReleaseMemObject(b_buf);
-        clReleaseMemObject(a_buf);
-        clReleaseKernel(kernel);
-        clReleaseProgram(program);
-        clReleaseCommandQueue(queue);
-        clReleaseContext(context);
-        return EXIT_FAILURE;
-    }
-
-    err = clSetKernelArg(kernel, 0, sizeof(cl_mem), &a_buf);
-    err |= clSetKernelArg(kernel, 1, sizeof(cl_mem), &b_buf);
-    err |= clSetKernelArg(kernel, 2, sizeof(cl_mem), &c_buf);
-    err |= clSetKernelArg(kernel, 3, sizeof(int), &n);
-    if (err != CL_SUCCESS) {
-        clReleaseMemObject(c_buf);
-        clReleaseMemObject(b_buf);
-        clReleaseMemObject(a_buf);
-        clReleaseKernel(kernel);
-        clReleaseProgram(program);
-        clReleaseCommandQueue(queue);
-        clReleaseContext(context);
-        return EXIT_FAILURE;
-    }
-
-    size_t global_size[2] = {static_cast<size_t>(n), static_cast<size_t>(n)};
-    err = clEnqueueNDRangeKernel(queue, kernel, 2, nullptr, global_size, nullptr, 0, nullptr, nullptr);
-    if (err == CL_SUCCESS) {
-        err = clEnqueueReadBuffer(queue, c_buf, CL_TRUE, 0, bytes, c_gpu.data(), 0, nullptr, nullptr);
-    }
-
-    bool ok = (err == CL_SUCCESS);
-    for (size_t i = 0; ok && i < total; ++i) {
-        if (std::fabs(c_gpu[i] - c_cpu[i]) > 1e-3f) {
-            ok = false;
+        for (int r = 0; r < N; ++r) {
+            for (int c = 0; c < N; ++c) {
+                float s = 0.0f;
+                for (int k = 0; k < N; ++k) s += A[r * N + k] * B[k * N + c];
+                ref[r * N + c] = s;
+            }
         }
+
+        const cl::Device device = pick_first_device();
+        cl::Context context(device);
+        cl::CommandQueue queue(context, device);
+        cl::Program program(context, kKernelSource);
+        program.build({device});
+        cl::Kernel kernel(program, "matmul");
+
+        cl::Buffer A_buf(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * elems, A.data());
+        cl::Buffer B_buf(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * elems, B.data());
+        cl::Buffer C_buf(context, CL_MEM_WRITE_ONLY, sizeof(float) * elems);
+
+        kernel.setArg(0, A_buf);
+        kernel.setArg(1, B_buf);
+        kernel.setArg(2, C_buf);
+        kernel.setArg(3, N);
+
+        queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(N, N), cl::NullRange);
+        queue.enqueueReadBuffer(C_buf, CL_TRUE, 0, sizeof(float) * elems, C.data());
+
+        bool ok = true;
+        for (size_t i = 0; i < elems; ++i) {
+            if (std::fabs(C[i] - ref[i]) > 1e-3f) {
+                ok = false;
+                break;
+            }
+        }
+
+        std::cout << (ok ? "Matrix multiply verified.\n" : "Matrix multiply failed.\n");
+        return ok ? EXIT_SUCCESS : EXIT_FAILURE;
+    } catch (const cl::Error& e) {
+        std::cerr << "OpenCL error: " << e.what() << " (" << e.err() << ")\n";
+        return EXIT_FAILURE;
+    } catch (const std::exception& e) {
+        std::cerr << e.what() << "\n";
+        return EXIT_FAILURE;
     }
-
-    std::cout << (ok ? "Matrix multiply verified.\n" : "Matrix multiply failed.\n");
-
-    clReleaseMemObject(c_buf);
-    clReleaseMemObject(b_buf);
-    clReleaseMemObject(a_buf);
-    clReleaseKernel(kernel);
-    clReleaseProgram(program);
-    clReleaseCommandQueue(queue);
-    clReleaseContext(context);
-
-    return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }
